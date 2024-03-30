@@ -1,3 +1,4 @@
+<!-- Reminder: Ensure consistent formatting throughout this document. Check for proper closure of code blocks, consistent use of whitespace around headings and code blocks, and uniformity in bullet points and numbered lists. -->
 # Catalog API
 
 ## Project Description
