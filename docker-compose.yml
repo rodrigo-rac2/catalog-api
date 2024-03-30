@@ -27,17 +27,17 @@ services:
     networks:
       - catalog-net
 
-  catalog-api:
-    build: ./api
-    container_name: catalog-api
-    ports:
-      - "5100:5100"
-    volumes:
-      - ./api:/app
-    depends_on:
-      - catalog-db
-    networks:
-      - catalog-net
+  # catalog-api:
+  #   build: ./api
+  #   container_name: catalog-api
+  #   ports:
+  #     - "5100:5100"
+  #   volumes:
+  #     - ./api:/app
+  #   depends_on:
+  #     - catalog-db
+  #   networks:
+  #     - catalog-net
 
 networks:
   catalog-net:
