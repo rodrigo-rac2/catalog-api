@@ -62,6 +62,8 @@ This project, `Catalog API`, is designed to manage a personal collection of vari
 
 This project can be set up using Docker for a containerized environment or locally by installing the necessary dependencies directly on your machine.
 
+## Getting Started
+
 ### Docker Setup
 
 1. **Prerequisites**: Ensure Docker and Docker Compose are installed. [Installation guide](https://docs.docker.com/get-docker/).
