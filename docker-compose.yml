@@ -1,3 +1,5 @@
+# docker-compose.yml
+
 version: "3.9"
 
 services:
@@ -11,33 +13,26 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_HOST_AUTH_METHOD: trust
-    logging:
-      options:
-        max-size: 10m
-        max-file: "3"
     volumes:
       - ./postgres/postgres-data:/var/lib/postgresql/data
       - ./postgres/scripts/ddl.catalog.sql:/docker-entrypoint-initdb.d/01_catalog-ddl.sql
       - ./postgres/scripts/dml.catalog.sql:/docker-entrypoint-initdb.d/02_catalog-dml.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -q -d catalog -U postgres"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
     networks:
       - catalog-net
 
-  # catalog-api:
-  #   build: ./api
-  #   container_name: catalog-api
-  #   ports:
-  #     - "5100:5100"
-  #   volumes:
-  #     - ./api:/app
-  #   depends_on:
-  #     - catalog-db
-  #   networks:
-  #     - catalog-net
+  catalog-api:
+    build: 
+      context: ./api  # Specifies the directory where the Dockerfile and application code are located
+    container_name: catalog-api
+    ports:
+      - "5100:5100"
+    depends_on:
+      - catalog-db
+    networks:
+      - catalog-net
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
 
 networks:
   catalog-net:
