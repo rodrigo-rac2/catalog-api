@@ -1,40 +1,48 @@
-# participant_routes.py is a blueprint for the participant routes
+# participant_routes.py
 
-from flask import Blueprint, request, jsonify
-from models.participant import Participant
+from flask_restx import Namespace, Resource, fields
+from models import db, Participant
 
-participant_bp = Blueprint('participants', __name__)
+api = Namespace('participants', description='Participant operations')
 
-@participant_bp.route('/', methods=['GET'])
-def get_participants():
-    participants = Participant.query.all()
-    return jsonify([participant.json() for participant in participants])
-    
-@participant_bp.route('/<int:id>', methods=['GET'])
-def get_participant_by_id(id):
-    participant = Participant.find_by_id(id)
-    return jsonify(participant.json()) if participant else ('Participant not found', 404)
+participant_model = api.model('Participant', {
+    'participantid': fields.Integer(readOnly=True, description='The participant unique identifier', attribute='participantid'),
+    'name': fields.String(required=True, description='The name of the participant')
+})
 
-@participant_bp.route('/', methods=['POST'])
-def add_participant():
-    data = request.get_json()
-    participant = Participant(**data)
-    participant.save_to_db()
-    return jsonify(participant.json()), 201
+@api.route('/')
+class ParticipantList(Resource):
+    @api.marshal_list_with(participant_model)
+    def get(self):
+        """List all participants"""
+        participants = Participant.query.all()
+        return participants
 
-@participant_bp.route('/<int:id>', methods=['PUT'])
-def update_participant(id):
-    data = request.get_json()
-    participant = Participant.find_by_id(id)
-    if participant:
-        participant.update(**data)
-        return jsonify(participant.json())
-    return 'Participant not found', 404
+@api.route('/<int:participantid>')
+@api.param('participantid', 'The participant identifier')
+@api.response(404, 'Participant not found')
+class ParticipantResource(Resource):
+    @api.marshal_with(participant_model)
+    def get(self, participantid):
+        """Fetch a participant given their identifier"""
+        participant = Participant.query.get_or_404(participantid)
+        return participant
 
-@participant_bp.route('/<int:id>', methods=['DELETE'])
-def delete_participant(id):
-    participant = Participant.find_by_id(id)
-    if participant:
-        participant.delete_from_db()
-        return 'Participant deleted', 200
-    return 'Participant not found', 404
+    @api.expect(participant_model)
+    @api.response(204, 'Participant successfully updated.')
+    def put(self, participantid):
+        """Update a participant given their identifier"""
+        participant = Participant.query.get_or_404(participantid)
+        data = api.payload
+        for key, value in data.items():
+            setattr(participant, key, value)
+        db.session.commit()
+        return participant, 204
+
+    @api.response(204, 'Participant successfully deleted.')
+    def delete(self, participantid):
+        """Delete a participant given their identifier"""
+        participant = Participant.query.get_or_404(participantid)
+        db.session.delete(participant)
+        db.session.commit()
+        return 'Participant deleted', 204

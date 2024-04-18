@@ -1,40 +1,58 @@
-# role_routes.py is a file that contains the routes for the Role model
+# role_routes.py
 
-from flask import Blueprint, request, jsonify
-from models.role import Role
+from flask_restx import Namespace, Resource, fields
+from models import Role, db  # Importing from centralized location
 
-role_bp = Blueprint('roles', __name__)
+api = Namespace('roles', description='Role operations')
 
-@role_bp.route('/', methods=['GET'])
-def get_roles():
-    roles = Role.query.all()
-    return jsonify([role.json() for role in roles])
+role_model = api.model('Role', {
+    'roleid': fields.Integer(description='Role ID', attribute='roleid'),
+    'description': fields.String(required=True, description='Role description')
+})
 
-@role_bp.route('/<int:id>', methods=['GET'])
-def get_role_by_id(id):
-    role = Role.find_by_id(id)
-    return jsonify(role.json()) if role else ('Role not found', 404)
+@api.route('/')
+class RoleList(Resource):
+    @api.marshal_list_with(role_model)
+    def get(self):
+        """List all roles"""
+        roles = Role.query.all()
+        return roles
 
-@role_bp.route('/', methods=['POST'])
-def add_role():
-    data = request.get_json()
-    role = Role(**data)
-    role.save_to_db()
-    return jsonify(role.json()), 201
+    @api.expect(role_model, validate=True)
+    @api.marshal_with(role_model, code=201)
+    def post(self):
+        """Create a new role"""
+        data = api.payload
+        role = Role(description=data['description'])
+        db.session.add(role)
+        db.session.commit()
+        return role, 201
 
-@role_bp.route('/<int:id>', methods=['PUT'])
-def update_role(id):
-    data = request.get_json()
-    role = Role.find_by_id(id)
-    if role:
-        role.update(**data)
-        return jsonify(role.json())
-    return 'Role not found', 404
+@api.route('/<int:id>')
+@api.param('id', 'The role identifier')
+@api.response(404, 'Role not found')
+class RoleResource(Resource):
+    @api.marshal_with(role_model)
+    def get(self, id):
+        """Fetch a role given their identifier"""
+        role = Role.query.get_or_404(id)
+        return role
 
-@role_bp.route('/<int:id>', methods=['DELETE'])
-def delete_role(id):
-    role = Role.find_by_id(id)
-    if role:
-        role.delete_from_db()
-        return 'Role deleted', 200
-    return 'Role not found', 404
+    @api.expect(role_model)
+    @api.response(204, 'Role successfully updated.')
+    def put(self, id):
+        """Update a role given their identifier"""
+        role = Role.query.get_or_404(id)
+        data = api.payload
+        if 'description' in data:
+            role.description = data['description']
+        db.session.commit()
+        return role, 204
+
+    @api.response(204, 'Role successfully deleted.')
+    def delete(self, id):
+        """Delete a role given their identifier"""
+        role = Role.query.get_or_404(id)
+        db.session.delete(role)
+        db.session.commit()
+        return 'Role deleted', 204

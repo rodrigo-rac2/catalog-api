@@ -1,22 +1,19 @@
 # participant.py
 from .base import db, BaseModel
-from .bookparticipant import BookParticipant
+from flask_restx import fields, Namespace
+
+api = Namespace('participants', description='Participant operations')
 
 class Participant(BaseModel):
     __tablename__ = 'participants'
 
-    id = db.Column('participantid', db.Integer, primary_key=True)
-    name = db.Column('name', db.String(255), nullable=False)
+    participantid = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
 
-    # Change the backref name to 'participant_books_association'
-    books = db.relationship('BookParticipant', back_populates='participant', cascade='all, delete-orphan')
+    # Use string for relationship to avoid circular import
+    books = db.relationship('BookParticipant', back_populates='participant')
 
-    def __init__(self, name):
-        self.name = name
-
-    def json(self):
-        return {
-            'id': self.id,
-            'name': self.name,
-            'books': [book_participant.book.title for book_participant in self.books]
-        }
+participant_model = api.model('Participant', {
+    'participantid': fields.Integer(description='Participant ID', attribute='participant_id'),
+    'name': fields.String(required=True, description='Participant name')
+})
