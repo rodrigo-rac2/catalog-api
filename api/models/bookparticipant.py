@@ -7,9 +7,10 @@ api = Namespace('book_participants', description='Operations related to book par
 class BookParticipant(BaseModel):
     __tablename__ = 'bookparticipants'
 
-    book_id = db.Column('bookid', db.Integer, db.ForeignKey('books.bookid'), primary_key=True)
-    participant_id = db.Column('participantid', db.Integer, db.ForeignKey('participants.participantid'), primary_key=True)
-    role_id = db.Column('roleid', db.Integer, db.ForeignKey('roles.roleid'), primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)  # New primary key
+    bookid = db.Column('bookid', db.Integer, db.ForeignKey('books.bookid'))
+    participantid = db.Column('participantid', db.Integer, db.ForeignKey('participants.participantid'))
+    roleid = db.Column('roleid', db.Integer, db.ForeignKey('roles.roleid'))
 
     # Relationship declared with string references to avoid circular imports
     book = db.relationship('Book', back_populates='participants')
@@ -17,10 +18,11 @@ class BookParticipant(BaseModel):
     role = db.relationship('Role', back_populates='book_participants')
 
 book_participant_model = api.model('BookParticipant', {
-    'book_id': fields.Integer(required=True, description='Book identifier', attribute='book_id'),
+    'id': fields.Integer(description='Book participant identifier', attribute='id'),  # New field 'id
+    'bookid': fields.Integer(required=True, description='Book identifier', attribute='bookid'),
     'participant': fields.Nested(api.model('Participant', {
-        'participantid': fields.Integer(description='Participant ID', attribute='participant_id'),
+        'participantid': fields.Integer(description='Participant ID', attribute='participantid'),
         'name': fields.String(description='Participant name')
     })),
-    'role_id': fields.Integer(required=True, description='Role identifier', attribute='role_id')
+    'roleid': fields.Integer(required=True, description='Role identifier', attribute='roleid')
 })

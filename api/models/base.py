@@ -1,7 +1,6 @@
 # app/models/base.py
-from flask_sqlalchemy import SQLAlchemy
 
-db = SQLAlchemy()
+from . import db  # Import db from models/__init__.py
 
 class BaseModel(db.Model):
     __abstract__ = True

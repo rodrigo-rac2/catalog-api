@@ -3,3 +3,4 @@ Flask-SQLAlchemy==3.1.1  # Aim for latest stable version (e.g., 3.x.x)
 psycopg2-binary==2.9.3  # Likely compatible with newer Flask versions
 python-dotenv==0.19.2  # Likely compatible with newer Flask versions
 flask-restx==1.3.0  # Likely compatible with newer Flask versions
+flask-cors==4.0.0

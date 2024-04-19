@@ -14,6 +14,6 @@ class Participant(BaseModel):
     books = db.relationship('BookParticipant', back_populates='participant')
 
 participant_model = api.model('Participant', {
-    'participantid': fields.Integer(description='Participant ID', attribute='participant_id'),
+    'participantid': fields.Integer(description='Participant ID', attribute='participantid'),
     'name': fields.String(required=True, description='Participant name')
 })
