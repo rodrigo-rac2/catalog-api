@@ -1,20 +1,20 @@
-# role.py
+#role.py
+
 from .base import db, BaseModel
+from flask_restx import fields, Namespace
+
+api = Namespace('roles', description='Role operations')
 
 class Role(BaseModel):
     __tablename__ = 'roles'
 
-    id = db.Column('roleid', db.Integer, primary_key=True)
-    description = db.Column('description', db.String(255), unique=True, nullable=False)
+    roleid = db.Column(db.Integer, primary_key=True)
+    description = db.Column(db.String(255), unique=True, nullable=False)
 
-    participants = db.relationship('BookParticipant', back_populates='role', cascade='all, delete-orphan')
+    # Ensure this matches the relationship defined in BookParticipant
+    book_participants = db.relationship('BookParticipant', back_populates='role')
 
-    def __init__(self, description):
-        self.description = description
-
-    def json(self):
-        return {
-            'id': self.id,
-            'description': self.description,
-            'participants': [book_participant.participant.name for book_participant in self.participants]
-        }
+    role_model = api.model('Role', {
+        'id': fields.Integer(description='Role ID', attribute='roleid'),
+        'description': fields.String(required=True, description='Role description')
+    })

@@ -1,185 +1,282 @@
 # book_routes.py
-from flask import Blueprint, request, jsonify
-from models.book import Book
-from models.bookparticipant import BookParticipant
-from models.participant import Participant
-from models.role import Role
-from models.base import db  # Import the SQLAlchemy db instance
+from flask import current_app
+from flask_restx import Namespace, Resource, fields, reqparse
+from sqlalchemy.exc import IntegrityError
+from models import db, Book, BookParticipant, Participant, Role
 
-book_bp = Blueprint('books', __name__)
+api = Namespace('books', description='Book operations')
 
+# Define participant and role information models
+participant_info_model = api.model('ParticipantInfo', {
+    'participantid': fields.Integer(description='Participant ID', attribute='participantid'),
+    'name': fields.String(description='Participant name')
+})
 
-@book_bp.route('/', methods=['GET'])
-def get_books():
-    books = Book.query.all()
-    return jsonify([book.json() for book in books])
+participant_id_model = api.model('ParticipantId', {
+    'participantid': fields.Integer(description='Participant ID', attribute='participantid')
+})
 
-@book_bp.route('/<int:id>', methods=['GET'])
-def get_book_by_id(id):
-    book = Book.find_by_id(id)
-    return jsonify(book.json()) if book else ('Book not found', 404)
+role_info_model = api.model('RoleInfo', {
+    'roleid': fields.Integer(description='Role ID', attribute='roleid'),
+    'description': fields.String(description='Role description')
+})
 
+role_id_model = api.model('RoleId', {
+    'roleid': fields.Integer(description='Role ID', attribute='roleid')
+})
 
-@book_bp.route('/', methods=['POST'])
-def add_book():
-    data = request.get_json()
+book_participant_model = api.model('BookParticipant', {
+    'participant': fields.Nested(participant_info_model),
+    'role': fields.Nested(role_info_model)
+})
+
+book_participant_id_model = api.model('BookParticipantId', {
+    'participant': fields.Nested(participant_id_model),
+    'role': fields.Nested(role_id_model)
+})
+
+# Define a model for POST requests specifically
+book_post_model = api.model('BookPost', {
+    'title': fields.String(required=True, description='Book title'),
+    'description': fields.String(description='Book description'),
+    'editionnumber': fields.Integer(description='Edition number of the book'),
+    'publisher': fields.String(description='Book publisher'),
+    'publicationplace': fields.String(description='Place of publication'),
+    'publicationdate': fields.String(description='Publication date'),
+    'numberofpages': fields.Integer(description='Number of pages'),
+    'isbn': fields.String(required=True, description='ISBN number')
+})
+
+# Main book model incorporating nested models
+book_model = api.model('Book', {
+    'bookid': fields.Integer(readOnly=True, description='The book unique identifier'),
+    'title': fields.String(required=True, description='Book title'),
+    'description': fields.String(description='Book description'),
+    'editionnumber': fields.Integer(description='Edition number of the book'),
+    'publisher': fields.String(description='Book publisher'),
+    'publicationplace': fields.String(description='Place of publication'),
+    'publicationdate': fields.String(description='Publication date'),
+    'numberofpages': fields.Integer(description='Number of pages'),
+    'isbn': fields.String(required=True, description='ISBN number'),
+    'participants': fields.List(fields.Nested(book_participant_model), description='Participants involved in the book', required=False)
+})
+
+# Argument parser for GET request filtering
+parser = reqparse.RequestParser()
+parser.add_argument('title', type=str, help='Filter by book title')
+parser.add_argument('isbn', type=str, help='Filter by ISBN')
+parser.add_argument('publisher', type=str, help='Filter by publisher')
+parser.add_argument('editionnumber', type=int, help='Filter by edition number')
+parser.add_argument('publicationplace', type=str, help='Filter by publication place')
+parser.add_argument('publicationdate', type=str, help='Filter by publication date like year')
+parser.add_argument('participant_name', type=str, help='Filter by participant name')
+
+@api.route('/')
+class BookList(Resource):
+    @api.expect(parser)
+    @api.marshal_list_with(book_model)
+    def get(self):
+        """List all books or filter books based on query parameters."""
+        args = parser.parse_args()  # Parse arguments from query
+        
+        # Start the query with joinedload options for efficient loading of relationships
+        query = Book.query.options(
+            db.joinedload(Book.participants).joinedload(BookParticipant.participant),
+            db.joinedload(Book.participants).joinedload(BookParticipant.role)
+        )
+        
+        # Apply filters based on arguments provided
+        if args['title']:
+            query = query.filter(Book.title.ilike(f'%{args["title"]}%'))
+        if args['isbn']:
+            query = query.filter(Book.isbn == args['isbn'])
+        if args['publisher']:
+            query = query.filter(Book.publisher.ilike(f'%{args["publisher"]}%'))
+        if args['editionnumber'] is not None:
+            query = query.filter(Book.editionnumber == args['editionnumber'])
+        if args['publicationplace']:
+            query = query.filter(Book.publicationplace.ilike(f'%{args["publicationplace"]}%'))
+        if args['publicationdate']:
+            query = query.filter(Book.publicationdate.like(f'%{args["publicationdate"]}%'))
+        if args['participant_name']:
+            query = query.join(BookParticipant).join(Participant).filter(Participant.name.ilike(f'%{args["participant_name"]}%'))
+        
+        # Execute the query and return results
+        books = query.all()
+        return books
+
+    @api.expect(book_post_model, validate=True)
+    @api.marshal_with(book_model, code=201)
+    def post(self):
+        """Create a new book"""
+        data = api.payload.copy()
+        participants_data = data.pop('participants', [])
+
+        try:
+            # Create the book without the participants data
+            book = Book(**data)
+            db.session.add(book)
+            db.session.commit()
+
+            return book, 201
+        except IntegrityError as ie:
+            db.session.rollback()
+            if 'isbn' in str(ie):
+                return {"message": "A book with this ISBN already exists."}, 409
+            return {"message": "Failed to add book due to a database error."}, 400
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to add book: {e}")
+            return {"message": f"Failed to add book due to an unexpected error: {str(e)}"}, 500
+
+@api.route('/<int:bookid>')
+@api.param('bookid', 'The book identifier')
+@api.response(404, 'Book not found')
+class BookResource(Resource):
+    @api.marshal_with(book_model)
+    def get(self, bookid):
+        """Fetch a book given its identifier"""
+        book = Book.query.options(
+            db.joinedload(Book.participants).joinedload(BookParticipant.participant),
+            db.joinedload(Book.participants).joinedload(BookParticipant.role)
+        ).get_or_404(bookid)
+        return book
+
+    @api.expect(book_post_model)
+    @api.response(204, 'Book successfully updated.')
+    @api.marshal_with(book_model)
+    def put(self, bookid):
+        """Update a book given its identifier"""
+        book = Book.query.get_or_404(bookid)
+        data = api.payload
+        for key, value in data.items():
+            setattr(book, key, value)
+        try:
+            db.session.commit()
+            return book, 204
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to update book: {e}")
+            return {"message": "Failed to update book"}, 500
+
+    @api.response(204, 'Book successfully deleted.')
+    def delete(self, bookid):
+        """Delete a book given its identifier"""
+        book = Book.query.get_or_404(bookid)
+        try:
+            db.session.delete(book)
+            db.session.commit()
+            return 'Book deleted', 204
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to delete book: {e}")
+            return {"message": "Failed to delete book"}, 500
+
+@api.route('/<int:bookid>/participants')
+@api.param('bookid', 'The book identifier')
+class BookParticipantList(Resource):
+    @api.marshal_list_with(book_participant_model)
+    def get(self, bookid):
+        """Get all participants associated with a specific book."""
+        book = Book.query.get(bookid)
+        if not book:
+            api.abort(404, "Book not found")
+        
+        # Load participants with their corresponding roles
+        participants = BookParticipant.query.options(
+            db.joinedload(BookParticipant.participant),
+            db.joinedload(BookParticipant.role)
+        ).filter(BookParticipant.bookid == bookid).all()
+        
+        if not participants:
+            return {"message": "No participants found for this book"}, 404
+        
+        return participants, 200
     
-    # Extract book information from the request
-    title = data.get('title')
-    isbn = data.get('isbn')
-    description = data.get('description', None)
-    edition_number = data.get('edition_number', None)
-    publisher = data.get('publisher', None)
-    publication_place = data.get('publication_place', None)
-    publication_date = data.get('publication_date', None)
-    number_of_pages = data.get('number_of_pages', None)
+    @api.expect(book_participant_id_model, validate=True)
+    @api.response(201, 'Participant added to book.')
+    @api.response(400, 'Bad request.')
+    @api.response(404, 'Book or participant not found.')
+    def post(self, bookid):
+        """Add a participant to a book"""
+        data = api.payload
 
-    # Create the Book instance but don't commit yet
-    book = Book(title=title, isbn=isbn, description=description, edition_number=edition_number,
-                publisher=publisher, publication_place=publication_place,
-                publication_date=publication_date, number_of_pages=number_of_pages)
+        # Validate that the book exists
+        book = Book.query.get(bookid)
+        if not book:
+            return {"message": "Book not found"}, 404
 
-    # Initialize a list to collect errors about non-existing participants
-    errors = []
+        # Extract participant and role IDs from the nested structure
+        participant_id = data.get('participant', {}).get('participantid')
+        role_id = data.get('role', {}).get('roleid')
 
-    # Handle participants and roles, ensuring participants exist
-    participants = data.get('participants', [])
-    for participant_info in participants:
-        participant_name = participant_info.get('name')
-        role_description = participant_info.get('role')
+        try:
+            # Fetch participant and role by IDs
+            participant = Participant.query.get(participant_id) if participant_id else None
+            role = Role.query.get(role_id) if role_id else None
 
-        # Check if the participant exists
-        participant = Participant.query.filter_by(name=participant_name).first()
-        if not participant:
-            errors.append(f"Participant '{participant_name}' not found.")
-            continue
+            if not participant or not role:
+                return {"message": "Invalid participant ID or role ID"}, 400
 
-        # Check if the role exists, create if not
-        role = Role.query.filter_by(description=role_description).first()
+            # Create and add the new BookParticipant entry
+            book_participant = BookParticipant(bookid=bookid, participantid=participant.participantid, roleid=role.roleid)
+            db.session.add(book_participant)
+            db.session.commit()
+            return {"message": "Participant added successfully"}, 201
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to add participant to book: {e}")
+            return {"message": "Failed to add participant to book"}, 500
+        
+@api.route('/<int:bookid>/participants/<int:participantid>/role/<int:roleid>')
+@api.param('bookid', 'The book identifier')
+@api.param('participantid', 'The participant identifier')
+@api.param('roleid', 'The role identifier to assign to the participant')
+class BookParticipantUpdateResource(Resource):
+    @api.response(204, 'Participant role updated successfully.')
+    @api.response(400, 'Bad request.')
+    @api.response(404, 'Book, participant or role not found.')
+    def put(self, bookid, participantid, roleid):
+        """Update a specific participant's role in a book."""
+        # Validate book exists
+        if not Book.query.get(bookid):
+            return {"message": "Book not found"}, 404
+
+        # Fetch the book participant entry
+        book_participant = BookParticipant.query.filter_by(bookid=bookid, participantid=participantid).first()
+        if not book_participant:
+            return {"message": "Participant not found in this book"}, 404
+
+        # Validate the new role exists
+        role = Role.query.get(roleid)
         if not role:
-            role = Role(description=role_description)
-            db.session.add(role)
+            return {"message": "Role not found"}, 404
 
-        # Create the BookParticipant association without committing yet
-        book_participant = BookParticipant(participant_id=participant.id, role_id=role.id)
-        book.participants.append(book_participant)
+        # Update the role ID for the participant
+        book_participant.roleid = roleid
+        db.session.commit()
+        return {"message": "Participant role updated successfully"}, 204
 
-    # If there were any errors, don't commit and return an error response
-    if errors:
-        db.session.rollback()  # Ensure no changes are made if there are errors
-        return jsonify({'errors': errors}), 400
-
-    # If all participants exist, commit the new book and its associations to the database
-    book.save_to_db()
-
-    return jsonify(book.json()), 201
-
-
-@book_bp.route('/<int:book_id>', methods=['PUT'])
-def update_book(book_id):
-    data = request.get_json()
-    
-    # Attempt to find the book
-    book = Book.find_by_id(book_id)
-    if not book:
-        return jsonify({'message': 'Book not found'}), 404
-    
-    # Update basic book details
-    for attribute in ['title', 'isbn', 'description', 'edition_number', 'publisher', 
-                      'publication_place', 'publication_date', 'number_of_pages']:
-        if attribute in data:
-            setattr(book, attribute, data[attribute])
-    
-    # Initialize list to collect errors
-    errors = []
-    
-    # Process participants and roles update
-    for participant_info in data.get('participants', []):
-        participant_name = participant_info.get('name')
-        new_role_description = participant_info.get('new_role')
         
-        # Attempt to find the participant by name
-        participant = Participant.query.filter_by(name=participant_name).first()
-        if not participant:
-            errors.append(f"Participant '{participant_name}' not found.")
-            continue
-        
-        # Attempt to find or create the role
-        role = Role.query.filter_by(description=new_role_description).first()
-        if not role:
-            role = Role(description=new_role_description)
-            db.session.add(role)
-        
-        # Attempt to find existing BookParticipant relation
-        book_participant = BookParticipant.query.filter_by(book_id=book.id, participant_id=participant.id).first()
-        if book_participant:
-            book_participant.role_id = role.id
-        else:
-            # If the relation does not exist, create a new one
-            new_book_participant = BookParticipant(book_id=book.id, participant_id=participant.id, role_id=role.id)
-            db.session.add(new_book_participant)
-    
-    if errors:
-        db.session.rollback()  # Rollback any changes if there are errors
-        return jsonify({'errors': errors}), 400
-    
-    db.session.commit()
-    return jsonify(book.json()), 200
+@api.route('/<int:bookid>/participant/<int:participantid>')
+@api.param('bookid', 'The book identifier')
+@api.param('participantid', 'The participant identifier')
+class BookParticipantDeleteResource(Resource):
+    @api.response(204, 'Participant deleted successfully.')
+    @api.response(404, 'Participant not found in this book.')
+    def delete(self, bookid, participantid):
+        """Delete a participant from a book"""
+        book_participant = BookParticipant.query.filter_by(bookid=bookid, participantid=participantid).first()
+        if not book_participant:
+            return {"message": "Participant not found in this book"}, 404
 
-@book_bp.route('/<int:book_id>', methods=['PATCH'])
-def patch_book(book_id):
-    data = request.get_json()
-    
-    # Attempt to find the book
-    book = Book.find_by_id(book_id)
-    if not book:
-        return jsonify({'message': 'Book not found'}), 404
-    
-    # Update book details if provided
-    for attribute in ['title', 'isbn', 'description', 'edition_number', 'publisher', 
-                      'publication_place', 'publication_date', 'number_of_pages']:
-        if attribute in data:
-            setattr(book, attribute, data[attribute])
+        try:
+            db.session.delete(book_participant)
+            db.session.commit()
+            return '', 204
 
-    # Initialize a list to collect errors
-    errors = []
-
-    # Optionally process participants and roles update if provided
-    if 'participants' in data:
-        for participant_info in data['participants']:
-            participant_name = participant_info.get('name')
-            new_role_description = participant_info.get('role', None)
-            
-            participant = Participant.query.filter_by(name=participant_name).first()
-            if not participant:
-                errors.append(f"Participant '{participant_name}' not found.")
-                continue
-
-            if new_role_description:
-                role = Role.query.filter_by(description=new_role_description).first()
-                if not role:
-                    role = Role(description=new_role_description)
-                    db.session.add(role)
-                book_participant = BookParticipant.query.filter_by(book_id=book.id, participant_id=participant.id).first()
-                if book_participant:
-                    book_participant.role_id = role.id
-                else:
-                    errors.append(f"BookParticipant relation for '{participant_name}' not found.")
-            else:
-                # If no new role provided, no action needed regarding roles
-                pass
-
-    if errors:
-        db.session.rollback()
-        return jsonify({'errors': errors}), 400
-
-    db.session.commit()
-    return jsonify(book.json()), 200
-
-@book_bp.route('/<int:id>', methods=['DELETE'])
-def delete_book(id):
-    book = Book.find_by_id(id)
-    if book:
-        book.delete_from_db()
-        return 'Book deleted', 200
-    return 'Book not found', 404
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to delete participant: {e}")
+            return {"message": "Failed to delete participant"}, 500

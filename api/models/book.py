@@ -1,44 +1,53 @@
 # book.py
 from .base import db, BaseModel
-from .bookparticipant import BookParticipant
+from flask_restx import fields, Namespace
 
+# Create a dedicated namespace for book operations
+api = Namespace('books', description='Book operations')
+
+# Define book model for database
 class Book(BaseModel):
     __tablename__ = 'books'
-
-    id = db.Column('bookid', db.Integer, primary_key=True)
-    title = db.Column('title', db.String(255), nullable=False)
-    description = db.Column('description', db.Text)
-    edition_number = db.Column('editionnumber', db.Integer)
-    publisher = db.Column('publisher', db.String(255))
-    publication_place = db.Column('publicationplace', db.String(255))
-    publication_date = db.Column('publicationdate', db.Date)
-    number_of_pages = db.Column('numberofpages', db.Integer)
-    isbn = db.Column('isbn', db.String(255), unique=True, nullable=False)
     
-    # Update the backref name to 'book_participants_association'
+    bookid = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    editionnumber = db.Column(db.Integer)
+    publisher = db.Column(db.String(255))
+    publicationplace = db.Column(db.String(255))
+    publicationdate = db.Column(db.Date)
+    numberofpages = db.Column(db.Integer)
+    isbn = db.Column(db.String(255), unique=True, nullable=False)
     participants = db.relationship('BookParticipant', back_populates='book', cascade='all, delete-orphan')
 
-    def __init__(self, title, isbn, description=None, edition_number=None, publisher=None,
-                 publication_place=None, publication_date=None, number_of_pages=None):
-        self.title = title
-        self.isbn = isbn
-        self.description = description
-        self.edition_number = edition_number
-        self.publisher = publisher
-        self.publication_place = publication_place
-        self.publication_date = publication_date
-        self.number_of_pages = number_of_pages
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)  # Utilize the parent class constructor for setting attributes
 
-    def json(self):
-        return {
-            'id': self.id,
-            'title': self.title,
-            'description': self.description,
-            'edition_number': self.edition_number,
-            'publisher': self.publisher,
-            'publication_place': self.publication_place,
-            'publication_date': self.publication_date.strftime('%Y-%m-%d') if self.publication_date else None,
-            'number_of_pages': self.number_of_pages,
-            'isbn': self.isbn,
-            'participants': [book_participant.participant.name for book_participant in self.participants]
-        }
+# API models for input/output serialization
+participant_info_model = api.model('ParticipantInfo', {
+    'participantid': fields.Integer(description='Participant ID', attribute='participantid'),
+    'name': fields.String(description='Participant name')
+})
+
+role_info_model = api.model('RoleInfo', {
+    'roleid': fields.Integer(description='Role ID', attribute='roleid'),
+    'description': fields.String(description='Role description')
+})
+
+book_participant_model = api.model('BookParticipant', {
+    'participant': fields.Nested(participant_info_model),
+    'role': fields.Nested(role_info_model)
+})
+
+book_model = api.model('Book', {
+    'id': fields.Integer(description='The book unique identifier', attribute='bookid'),
+    'title': fields.String(required=True, description='Book title'),
+    'description': fields.String(description='Book description'),
+    'editionnumber': fields.Integer(description='Edition number of the book'),
+    'publisher': fields.String(description='Book publisher'),
+    'publicationplace': fields.String(description='Place of publication'),
+    'publicationdate': fields.String(description='Publication date'),
+    'numberofpages': fields.Integer(description='Number of pages'),
+    'isbn': fields.String(required=True, description='ISBN number'),
+    'participants': fields.List(fields.Nested(book_participant_model), description='Participants involved in the book', required=False)
+})

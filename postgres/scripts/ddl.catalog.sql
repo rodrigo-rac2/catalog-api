@@ -24,12 +24,12 @@ create table if not exists books (
 );
 
 -- Creating table for the relationship between Books and Participants
-create table if not exists bookparticipants (
-    bookid int,
-    participantid int,
-    roleid int,
-    constraint pk_bookparticipant primary key (bookid, participantid, roleid),
-    constraint fk_book foreign key (bookid) references books(bookid),
-    constraint fk_participant foreign key (participantid) references participants(participantid),
-    constraint fk_role foreign key (roleid) references roles(roleid)
+CREATE TABLE IF NOT EXISTS bookparticipants (
+    id SERIAL PRIMARY KEY,  -- New primary key column
+    bookid INT,
+    participantid INT,
+    roleid INT,
+    CONSTRAINT fk_book FOREIGN KEY (bookid) REFERENCES books(bookid),
+    CONSTRAINT fk_participant FOREIGN KEY (participantid) REFERENCES participants(participantid),
+    CONSTRAINT fk_role FOREIGN KEY (roleid) REFERENCES roles(roleid)
 );

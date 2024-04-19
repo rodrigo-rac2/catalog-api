@@ -26,6 +26,12 @@
   - [Advanced Setup and Tips](#advanced-setup-and-tips)
     - [Running with Docker](#running-with-docker)
     - [Troubleshooting Common Issues](#troubleshooting-common-issues)
+  - [API Endpoints](#api-endpoints)
+    - [Books](#books)
+    - [Participants](#participants)
+    - [Roles](#roles)
+    - [Swagger Documentation](#swagger-documentation)
+    - [Note on Usage](#note-on-usage)
   - [Next Steps and Usage](#next-steps-and-usage)
   - [Security Best Practices](#security-best-practices)
   - [Contributing to the Project](#contributing-to-the-project)
@@ -250,6 +256,85 @@ If you're utilizing Docker, ensure your `docker-compose.yml` file correctly defi
 
 - **Database Connection Errors**: Verify that the `DATABASE_URL` in your `.env` file matches your PostgreSQL credentials and that the PostgreSQL service is running.
 - **Dependency Installation Issues**: Ensure you're using a virtual environment if package conflicts occur. Recheck the `requirements.txt` file for the correct package versions.
+
+## API Endpoints
+
+This section details some of the specific endpoints of the API, particularly those related to participants and roles, which are crucial for managing the relationships within the catalog.
+
+### Books
+
+- **GET /books**:
+  - Retrieves a list of all books in the catalog. This endpoint supports filtering by various attributes like title, ISBN, publisher, and more, allowing users to find books that meet specific criteria.
+
+- **POST /books**:
+  - Adds a new book to the catalog. Required fields typically include the title and ISBN. Optional fields might include description, edition number, publication date, etc.
+
+- **GET /books/{bookid}**:
+  - Fetches detailed information about a specific book using its unique identifier.
+
+- **PUT /books/{bookid}**:
+  - Updates the details of an existing book. All aspects of the book record (like title, description, number of pages) can be modified through this endpoint.
+
+- **DELETE /books/{bookid}**:
+  - Completely removes a book from the catalog based on its ID.
+
+- **GET /books/{bookid}/participants**:
+  - Retrieves a list of all participants related to a specific book, along with their roles, such as authors, editors, etc.
+
+- **POST /books/{bookid}/participants**:
+  - Adds a new participant with a role to a specific book, linking them through their role in the book's creation or publication.
+
+- **PUT /books/{bookid}/participants/{participantid}/role/{roleid}**:
+  - Updates the role of a specific participant associated with a book, useful for correcting or changing the participant's contribution details.
+
+- **DELETE /books/{bookid}/participant/{participantid}**:
+  - Removes a participant's association from a book, effectively deleting their contribution record from that specific book.
+
+### Participants
+
+- **GET /participants**:
+  - Retrieves a list of all participants. Each participant represents an entity that can be associated with different items in the catalog, such as a book.
+
+- **POST /participants**:
+  - Creates a new participant. The request must include a name for the participant, which is used to identify them uniquely within the catalog.
+
+- **GET /participants/{participantid}**:
+  - Fetches a detailed view of a specific participant based on their unique identifier.
+
+- **PUT /participants/{participantid}**:
+  - Updates information for an existing participant. This can be used to change the name of the participant.
+
+- **DELETE /participants/{participantid}**:
+  - Removes a participant from the catalog entirely, ensuring that they are no longer linked to any items.
+
+### Roles
+
+- **GET /roles**:
+  - Lists all roles available in the system. Roles define the capacity in which a participant is related to an item, such as "Author", "Editor", or "Translator" for books.
+
+- **POST /roles**:
+  - Allows the addition of a new role to the system, which can then be assigned to participants.
+
+- **GET /roles/{roleid}**:
+  - Retrieves detailed information about a specific role by its ID.
+
+- **PUT /roles/{roleid}**:
+  - Modifies an existing role, typically used to change the description of the role.
+
+- **DELETE /roles/{roleid}**:
+  - Deletes a role from the system, which will affect how participants can be associated with items if they were linked to this role.
+
+### Swagger Documentation
+
+To access interactive documentation and try out the API endpoints directly, navigate to the Swagger UI:
+
+- **URL**: `http://localhost:5100/`
+
+This Swagger UI provides a user-friendly interface to directly interact with all endpoints of the API. You can execute requests, see responses in real-time, and explore the full capabilities of the Catalog API without writing any additional code.
+
+### Note on Usage
+
+For all endpoints that modify data (POST, PUT, DELETE), ensure that your requests are correctly formatted and include all required fields as specified in the Swagger documentation. Incorrect requests may lead to errors or unintended behavior.
 
 ## Next Steps and Usage
 
