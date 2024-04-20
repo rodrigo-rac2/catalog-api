@@ -1,5 +1,10 @@
 <!-- Reminder: Ensure consistent formatting throughout this document. Check for proper closure of code blocks, consistent use of whitespace around headings and code blocks, and uniformity in bullet points and numbered lists. -->
 
+
+This project is part of the PUC-Rio's Sprint 1 MVP of the Specialization in FullStack Development course. It was fully developed during the Sprint time, as commit history shows. 
+This is being developed by student [Rodrigo Alves Costa](mailto:rodrigo.costa@gmail.com).
+There's an SPA front-end to access this API at [https://github.com/rodrigo-rac2/catalog-ui/](https://github.com/rodrigo-rac2/catalog-ui/)
+
 ## Table of Contents
 
 - [Catalog API](#catalog-api)
