@@ -67,9 +67,13 @@ parser.add_argument('title', type=str, help='Filter by book title')
 parser.add_argument('isbn', type=str, help='Filter by ISBN')
 parser.add_argument('publisher', type=str, help='Filter by publisher')
 parser.add_argument('editionnumber', type=int, help='Filter by edition number')
-parser.add_argument('publicationplace', type=str, help='Filter by publication place')
-parser.add_argument('publicationdate', type=str, help='Filter by publication date like year')
-parser.add_argument('participant_name', type=str, help='Filter by participant name')
+parser.add_argument('publicationplace', type=str,
+                    help='Filter by publication place')
+parser.add_argument('publicationdate', type=str,
+                    help='Filter by publication date like year')
+parser.add_argument('participant_name', type=str,
+                    help='Filter by participant name')
+
 
 @api.route('/')
 class BookList(Resource):
@@ -78,29 +82,34 @@ class BookList(Resource):
     def get(self):
         """List all books or filter books based on query parameters."""
         args = parser.parse_args()  # Parse arguments from query
-        
+
         # Start the query with joinedload options for efficient loading of relationships
         query = Book.query.options(
-            db.joinedload(Book.participants).joinedload(BookParticipant.participant),
+            db.joinedload(Book.participants).joinedload(
+                BookParticipant.participant),
             db.joinedload(Book.participants).joinedload(BookParticipant.role)
         )
-        
+
         # Apply filters based on arguments provided
         if args['title']:
             query = query.filter(Book.title.ilike(f'%{args["title"]}%'))
         if args['isbn']:
             query = query.filter(Book.isbn == args['isbn'])
         if args['publisher']:
-            query = query.filter(Book.publisher.ilike(f'%{args["publisher"]}%'))
+            query = query.filter(
+                Book.publisher.ilike(f'%{args["publisher"]}%'))
         if args['editionnumber'] is not None:
             query = query.filter(Book.editionnumber == args['editionnumber'])
         if args['publicationplace']:
-            query = query.filter(Book.publicationplace.ilike(f'%{args["publicationplace"]}%'))
+            query = query.filter(Book.publicationplace.ilike(
+                f'%{args["publicationplace"]}%'))
         if args['publicationdate']:
-            query = query.filter(Book.publicationdate.like(f'%{args["publicationdate"]}%'))
+            query = query.filter(Book.publicationdate.like(
+                f'%{args["publicationdate"]}%'))
         if args['participant_name']:
-            query = query.join(BookParticipant).join(Participant).filter(Participant.name.ilike(f'%{args["participant_name"]}%'))
-        
+            query = query.join(BookParticipant).join(Participant).filter(
+                Participant.name.ilike(f'%{args["participant_name"]}%'))
+
         # Execute the query and return results
         books = query.all()
         return books
@@ -113,14 +122,23 @@ class BookList(Resource):
         participants_data = data.pop('participants', [])
 
         try:
+            # Convert editionnumber and numberofpages to integers if they are not None
+            if 'editionnumber' in data:
+                data['editionnumber'] = int(data['editionnumber'])
+            if 'numberofpages' in data:
+                data['numberofpages'] = int(data['numberofpages'])
+            
             # Create the book without the participants data
             book = Book(**data)
             db.session.add(book)
             db.session.commit()
+            
+            current_app.logger.info(f"New book added with ID {book.bookid}")
 
             return book, 201
         except IntegrityError as ie:
             db.session.rollback()
+            current_app.logger.warning(f"Attempt to add duplicate book with ISBN {data.get('isbn')}")
             if 'isbn' in str(ie):
                 return {"message": "A book with this ISBN already exists."}, 409
             return {"message": "Failed to add book due to a database error."}, 400
@@ -128,6 +146,7 @@ class BookList(Resource):
             db.session.rollback()
             current_app.logger.error(f"Failed to add book: {e}")
             return {"message": f"Failed to add book due to an unexpected error: {str(e)}"}, 500
+
 
 @api.route('/<int:bookid>')
 @api.param('bookid', 'The book identifier')
@@ -137,7 +156,8 @@ class BookResource(Resource):
     def get(self, bookid):
         """Fetch a book given its identifier"""
         book = Book.query.options(
-            db.joinedload(Book.participants).joinedload(BookParticipant.participant),
+            db.joinedload(Book.participants).joinedload(
+                BookParticipant.participant),
             db.joinedload(Book.participants).joinedload(BookParticipant.role)
         ).get_or_404(bookid)
         return book
@@ -149,15 +169,29 @@ class BookResource(Resource):
         """Update a book given its identifier"""
         book = Book.query.get_or_404(bookid)
         data = api.payload
-        for key, value in data.items():
-            setattr(book, key, value)
         try:
+            for key, value in data.items():
+                if key in ['editionnumber', 'numberofpages'] and value is not None:
+                    value = int(value)  # Convert to integer if necessary
+                setattr(book, key, value)
             db.session.commit()
+            current_app.logger.info(f"Book updated with ID {book.bookid}")
             return book, 204
+        except ValueError as ve:
+            # Handle ValueError if integer conversion fails
+            db.session.rollback()
+            current_app.logger.error(f"Failed to update book due to type mismatch: {ve}")
+            return {"message": "Invalid input, integer required: " + str(ve)}, 400
+        except IntegrityError as ie:
+            # Handle any integrity errors from the database
+            db.session.rollback()
+            current_app.logger.error(f"Attempt to update book to an existing ISBN: {data.get('isbn')}")
+            return {"message": "Integrity error occurred: " + str(ie)}, 400
         except Exception as e:
+            # Handle other exceptions
             db.session.rollback()
             current_app.logger.error(f"Failed to update book: {e}")
-            return {"message": "Failed to update book"}, 500
+            return {"message": "Failed to update book: " + str(e)}, 500
 
     @api.response(204, 'Book successfully deleted.')
     def delete(self, bookid):
@@ -172,6 +206,7 @@ class BookResource(Resource):
             current_app.logger.error(f"Failed to delete book: {e}")
             return {"message": "Failed to delete book"}, 500
 
+
 @api.route('/<int:bookid>/participants')
 @api.param('bookid', 'The book identifier')
 class BookParticipantList(Resource):
@@ -181,18 +216,18 @@ class BookParticipantList(Resource):
         book = Book.query.get(bookid)
         if not book:
             api.abort(404, "Book not found")
-        
+
         # Load participants with their corresponding roles
         participants = BookParticipant.query.options(
             db.joinedload(BookParticipant.participant),
             db.joinedload(BookParticipant.role)
         ).filter(BookParticipant.bookid == bookid).all()
-        
+
         if not participants:
             return {"message": "No participants found for this book"}, 404
-        
+
         return participants, 200
-    
+
     @api.expect(book_participant_id_model, validate=True)
     @api.response(201, 'Participant added to book.')
     @api.response(400, 'Bad request.')
@@ -212,14 +247,16 @@ class BookParticipantList(Resource):
 
         try:
             # Fetch participant and role by IDs
-            participant = Participant.query.get(participant_id) if participant_id else None
+            participant = Participant.query.get(
+                participant_id) if participant_id else None
             role = Role.query.get(role_id) if role_id else None
 
             if not participant or not role:
                 return {"message": "Invalid participant ID or role ID"}, 400
 
             # Create and add the new BookParticipant entry
-            book_participant = BookParticipant(bookid=bookid, participantid=participant.participantid, roleid=role.roleid)
+            book_participant = BookParticipant(
+                bookid=bookid, participantid=participant.participantid, roleid=role.roleid)
             db.session.add(book_participant)
             db.session.commit()
             return {"message": "Participant added successfully"}, 201
@@ -228,7 +265,8 @@ class BookParticipantList(Resource):
             db.session.rollback()
             current_app.logger.error(f"Failed to add participant to book: {e}")
             return {"message": "Failed to add participant to book"}, 500
-        
+
+
 @api.route('/<int:bookid>/participants/<int:participantid>/role/<int:roleid>')
 @api.param('bookid', 'The book identifier')
 @api.param('participantid', 'The participant identifier')
@@ -244,7 +282,8 @@ class BookParticipantUpdateResource(Resource):
             return {"message": "Book not found"}, 404
 
         # Fetch the book participant entry
-        book_participant = BookParticipant.query.filter_by(bookid=bookid, participantid=participantid).first()
+        book_participant = BookParticipant.query.filter_by(
+            bookid=bookid, participantid=participantid).first()
         if not book_participant:
             return {"message": "Participant not found in this book"}, 404
 
@@ -258,7 +297,7 @@ class BookParticipantUpdateResource(Resource):
         db.session.commit()
         return {"message": "Participant role updated successfully"}, 204
 
-        
+
 @api.route('/<int:bookid>/participant/<int:participantid>')
 @api.param('bookid', 'The book identifier')
 @api.param('participantid', 'The participant identifier')
@@ -267,7 +306,8 @@ class BookParticipantDeleteResource(Resource):
     @api.response(404, 'Participant not found in this book.')
     def delete(self, bookid, participantid):
         """Delete a participant from a book"""
-        book_participant = BookParticipant.query.filter_by(bookid=bookid, participantid=participantid).first()
+        book_participant = BookParticipant.query.filter_by(
+            bookid=bookid, participantid=participantid).first()
         if not book_participant:
             return {"message": "Participant not found in this book"}, 404
 
