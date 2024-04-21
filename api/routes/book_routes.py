@@ -336,7 +336,7 @@ class BookParticipantUpdateResource(Resource):
         return {"message": "Participant role updated successfully"}, 204
 
 
-@api.route('/<int:bookid>/participant/<int:participantid>')
+@api.route('/<int:bookid>/participants/<int:participantid>')
 @api.param('bookid', 'The book identifier')
 @api.param('participantid', 'The participant identifier')
 class BookParticipantDeleteResource(Resource):
