@@ -265,6 +265,28 @@ class BookParticipantList(Resource):
             db.session.rollback()
             current_app.logger.error(f"Failed to add participant to book: {e}")
             return {"message": "Failed to add participant to book"}, 500
+        
+@api.route('/<int:bookid>/roles/<int:roleid>/participants')
+@api.param('bookid', 'The book identifier')
+@api.param('roleid', 'The role identifier')
+class BookRoleList(Resource):
+    @api.marshal_list_with(book_participant_model)
+    def get(self, bookid, roleid):
+        """Get all participants of role associated with a specific book."""
+        book = Book.query.get(bookid)
+        if not book:
+            api.abort(404, "Book not found")
+
+        # Load participants with their corresponding roles
+        participants = BookParticipant.query.options(
+            db.joinedload(BookParticipant.participant),
+            db.joinedload(BookParticipant.role)
+        ).filter(BookParticipant.bookid == bookid, BookParticipant.roleid == roleid).all()
+
+        if not participants:
+            return {"message": "No participants found for this book"}, 404
+
+        return participants, 200
 
 
 @api.route('/<int:bookid>/participants/<int:participantid>/role/<int:roleid>')
