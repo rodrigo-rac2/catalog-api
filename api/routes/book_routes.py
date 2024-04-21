@@ -7,6 +7,16 @@ from models import db, Book, BookParticipant, Participant, Role
 api = Namespace('books', description='Book operations')
 
 # Define participant and role information models
+
+book_info_model = api.model('BookInfo', {
+    'bookid': fields.Integer(description='Book ID', attribute='bookid'),
+    'title': fields.String(description='Book title')
+})
+
+book_id_model = api.model('BookId', {
+    'bookid': fields.Integer(description='Book ID', attribute='bookid')
+})
+
 participant_info_model = api.model('ParticipantInfo', {
     'participantid': fields.Integer(description='Participant ID', attribute='participantid'),
     'name': fields.String(description='Participant name')
@@ -23,6 +33,12 @@ role_info_model = api.model('RoleInfo', {
 
 role_id_model = api.model('RoleId', {
     'roleid': fields.Integer(description='Role ID', attribute='roleid')
+})
+
+book_participant_role_model = api.model('BookParticipantRole', {
+    'book': fields.Nested(book_info_model),
+    'participant': fields.Nested(participant_info_model),
+    'role': fields.Nested(role_info_model)
 })
 
 book_participant_model = api.model('BookParticipant', {
@@ -210,7 +226,7 @@ class BookResource(Resource):
 @api.route('/<int:bookid>/participants')
 @api.param('bookid', 'The book identifier')
 class BookParticipantList(Resource):
-    @api.marshal_list_with(book_participant_model)
+    @api.marshal_list_with(book_participant_role_model)
     def get(self, bookid):
         """Get all participants associated with a specific book."""
         book = Book.query.get(bookid)
@@ -270,7 +286,7 @@ class BookParticipantList(Resource):
 @api.param('bookid', 'The book identifier')
 @api.param('roleid', 'The role identifier')
 class BookRoleList(Resource):
-    @api.marshal_list_with(book_participant_model)
+    @api.marshal_list_with(book_participant_role_model)
     def get(self, bookid, roleid):
         """Get all participants of role associated with a specific book."""
         book = Book.query.get(bookid)
