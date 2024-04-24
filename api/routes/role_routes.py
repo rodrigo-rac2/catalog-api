@@ -1,8 +1,9 @@
 # role_routes.py
 from flask import current_app
 from flask_restx import Namespace, Resource, fields
+from sqlalchemy.sql import select
 from sqlalchemy.exc import IntegrityError
-from models import db, Role
+from models import db, Role, BookParticipant
 
 api = Namespace('roles', description='Role operations')
 
@@ -14,6 +15,7 @@ role_model = api.model('Role', {
     'roleid': fields.Integer(readOnly=True, description='Role ID', attribute='roleid'),
     'description': fields.String(required=True, description='Role description')
 })
+
 
 @api.route('/')
 class RoleList(Resource):
@@ -42,6 +44,7 @@ class RoleList(Resource):
             current_app.logger.error(f"Failed to add role: {e}")
             return {"message": "Failed to add role"}, 500
 
+
 @api.route('/<int:id>')
 @api.param('id', 'The role identifier')
 @api.response(404, 'Role not found')
@@ -57,7 +60,7 @@ class RoleResource(Resource):
 
     @api.expect(role_description_model)
     @api.response(204, 'Role successfully updated.')
-    @api.marshal_with(role_model)  
+    @api.marshal_with(role_model)
     def put(self, id):
         """Update a role given its identifier"""
         role = Role.query.get(id)
@@ -75,15 +78,23 @@ class RoleResource(Resource):
         role = Role.query.get(id)
         if not role:
             api.abort(404, f"Role with ID {id} not found")
+    
+        # Prepare a subquery for exist check
+        subquery = db.session.query(BookParticipant.roleid).filter(BookParticipant.roleid == id).exists()
+        # Check if the role is assigned to any participants
+        if db.session.query(subquery).scalar():
+            api.abort(400, f"Role with ID {id} is currently assigned to participants and cannot be deleted.")
+    
         try:
             db.session.delete(role)
             db.session.commit()
         except IntegrityError as e:
             db.session.rollback()
             current_app.logger.error(f"Cannot delete role ({id}) as it is currently assigned to one or more participants: {e}")
-            return {'message': 'Cannot delete role ({id}) as it is currently assigned to one or more participants'}, 500
+            api.abort(400, f"Cannot delete role ({id}) as it is currently assigned to one or more participants.")
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Failed to delete role ({id}): {e}")
-            return {'message': 'Failed to delete role ({id})'}, 500
+            api.abort(500, f'Failed to delete role ({id})')
+    
         return {'message': 'Role deleted'}, 204

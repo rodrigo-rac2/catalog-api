@@ -216,6 +216,7 @@ class BookResource(Resource):
     def delete(self, bookid):
         """Delete a book given its identifier"""
         book = Book.query.get_or_404(bookid)
+
         try:
             db.session.delete(book)
             db.session.commit()
