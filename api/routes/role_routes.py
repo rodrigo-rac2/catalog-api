@@ -1,6 +1,7 @@
 # role_routes.py
 from flask import current_app
 from flask_restx import Namespace, Resource, fields
+from sqlalchemy.exc import IntegrityError
 from models import db, Role
 
 api = Namespace('roles', description='Role operations')
@@ -74,6 +75,15 @@ class RoleResource(Resource):
         role = Role.query.get(id)
         if not role:
             api.abort(404, f"Role with ID {id} not found")
-        db.session.delete(role)
-        db.session.commit()
+        try:
+            db.session.delete(role)
+            db.session.commit()
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Cannot delete role ({id}) as it is currently assigned to one or more participants: {e}")
+            return {'message': 'Cannot delete role ({id}) as it is currently assigned to one or more participants'}, 500
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to delete role ({id}): {e}")
+            return {'message': 'Failed to delete role ({id})'}, 500
         return {'message': 'Role deleted'}, 204

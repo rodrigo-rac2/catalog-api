@@ -2,6 +2,7 @@
 
 from flask import current_app
 from flask_restx import Namespace, Resource, fields
+from sqlalchemy.exc import IntegrityError
 from models import db, Participant
 
 api = Namespace('participants', description='Participant operations')
@@ -76,6 +77,15 @@ class ParticipantResource(Resource):
         participant = Participant.query.get(participantid)
         if not participant:
             api.abort(404, f"Participant with ID {participantid} not found")
-        db.session.delete(participant)
-        db.session.commit()
+        try: 
+            db.session.delete(participant)
+            db.session.commit()
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Cannot delete participant ({participantid}) as it is currently assigned to one or more books: {e}")
+            return {'message': 'Cannot delete participant ({participantid}) as it is currently assigned to one or more books'}, 500
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to delete participant ({participantid}): {e}")
+            return {'message': 'Failed to delete participant ({participantid})'}, 500
         return {'message': 'Participant deleted'}, 204
