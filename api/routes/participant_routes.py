@@ -2,7 +2,9 @@
 
 from flask import current_app
 from flask_restx import Namespace, Resource, fields
-from models import db, Participant
+from sqlalchemy import exists
+from sqlalchemy.exc import IntegrityError
+from models import db, Participant, BookParticipant
 
 api = Namespace('participants', description='Participant operations')
 
@@ -76,6 +78,21 @@ class ParticipantResource(Resource):
         participant = Participant.query.get(participantid)
         if not participant:
             api.abort(404, f"Participant with ID {participantid} not found")
-        db.session.delete(participant)
-        db.session.commit()
+        # Prepare a subquery for exist check
+        subquery = db.session.query(BookParticipant.participantid).filter(BookParticipant.participantid == participantid).exists()
+        # Check if the participant is assigned to any books
+        if db.session.query(subquery).scalar():
+            api.abort(400, f"Participant with ID {participantid} is currently assigned to a book and cannot be deleted.")
+
+        try: 
+            db.session.delete(participant)
+            db.session.commit()
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Cannot delete participant ({participantid}) as it is currently assigned to one or more books: {e}")
+            api.abort(400, f"Cannot delete participant ({participantid}) as it is currently assigned to one or more books.")  # Use api.abort to send the correct status and message
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Failed to delete participant ({participantid}): {e}")
+            api.abort(500, f"Failed to delete participant ({participantid}).")  # Use api.abort to send the correct status and message
         return {'message': 'Participant deleted'}, 204

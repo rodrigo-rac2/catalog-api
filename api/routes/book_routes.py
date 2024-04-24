@@ -143,18 +143,19 @@ class BookList(Resource):
                 data['editionnumber'] = int(data['editionnumber'])
             if 'numberofpages' in data:
                 data['numberofpages'] = int(data['numberofpages'])
-            
+
             # Create the book without the participants data
             book = Book(**data)
             db.session.add(book)
             db.session.commit()
-            
+
             current_app.logger.info(f"New book added with ID {book.bookid}")
 
             return book, 201
         except IntegrityError as ie:
             db.session.rollback()
-            current_app.logger.warning(f"Attempt to add duplicate book with ISBN {data.get('isbn')}")
+            current_app.logger.warning(
+                f"Attempt to add duplicate book with ISBN {data.get('isbn')}")
             if 'isbn' in str(ie):
                 return {"message": "A book with this ISBN already exists."}, 409
             return {"message": "Failed to add book due to a database error."}, 400
@@ -196,12 +197,14 @@ class BookResource(Resource):
         except ValueError as ve:
             # Handle ValueError if integer conversion fails
             db.session.rollback()
-            current_app.logger.error(f"Failed to update book due to type mismatch: {ve}")
+            current_app.logger.error(
+                f"Failed to update book due to type mismatch: {ve}")
             return {"message": "Invalid input, integer required: " + str(ve)}, 400
         except IntegrityError as ie:
             # Handle any integrity errors from the database
             db.session.rollback()
-            current_app.logger.error(f"Attempt to update book to an existing ISBN: {data.get('isbn')}")
+            current_app.logger.error(
+                f"Attempt to update book to an existing ISBN: {data.get('isbn')}")
             return {"message": "Integrity error occurred: " + str(ie)}, 400
         except Exception as e:
             # Handle other exceptions
@@ -213,10 +216,16 @@ class BookResource(Resource):
     def delete(self, bookid):
         """Delete a book given its identifier"""
         book = Book.query.get_or_404(bookid)
+
         try:
             db.session.delete(book)
             db.session.commit()
             return 'Book deleted', 204
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(
+                f"Cannot delete book ({bookid}) as it has participants assigned: {e}")
+            return {'message': 'Cannot delete book ({bookid}) as it has participants assinged'}, 500
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Failed to delete book: {e}")
@@ -281,7 +290,8 @@ class BookParticipantList(Resource):
             db.session.rollback()
             current_app.logger.error(f"Failed to add participant to book: {e}")
             return {"message": "Failed to add participant to book"}, 500
-        
+
+
 @api.route('/<int:bookid>/roles/<int:roleid>/participants')
 @api.param('bookid', 'The book identifier')
 @api.param('roleid', 'The role identifier')
@@ -303,7 +313,8 @@ class BookRoleList(Resource):
             return {"message": "No participants found for this book"}, 404
 
         return participants, 200
-    
+
+
 @api.route('/<int:bookid>/filterbyrole/<int:roleid>/participants')
 @api.param('bookid', 'The book identifier')
 @api.param('roleid', 'The role identifier')
@@ -325,6 +336,7 @@ class BookFilterRoleList(Resource):
             return {"message": "No participants found for this book"}, 404
 
         return participants, 200
+
 
 @api.route('/<int:bookid>/participants/<int:participantid>/role/<int:roleid>')
 @api.param('bookid', 'The book identifier')

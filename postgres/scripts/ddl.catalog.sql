@@ -23,13 +23,13 @@ create table if not exists books (
     isbn varchar(255) unique not null
 );
 
--- Creating table for the relationship between Books and Participants
+-- Creating table for the relationship between Books, Roles and Participants
 CREATE TABLE IF NOT EXISTS bookparticipants (
-    id SERIAL PRIMARY KEY,  -- New primary key column
+    id SERIAL PRIMARY KEY,
     bookid INT,
     participantid INT,
     roleid INT,
-    CONSTRAINT fk_book FOREIGN KEY (bookid) REFERENCES books(bookid),
-    CONSTRAINT fk_participant FOREIGN KEY (participantid) REFERENCES participants(participantid),
-    CONSTRAINT fk_role FOREIGN KEY (roleid) REFERENCES roles(roleid)
+    CONSTRAINT fk_book FOREIGN KEY (bookid) REFERENCES books(bookid) ON DELETE CASCADE,
+    CONSTRAINT fk_participant FOREIGN KEY (participantid) REFERENCES participants(participantid) ON DELETE RESTRICT,
+    CONSTRAINT fk_role FOREIGN KEY (roleid) REFERENCES roles(roleid) ON DELETE RESTRICT
 );
