@@ -1,7 +1,7 @@
 # participant_routes.py
 
 from flask import current_app
-from flask_restx import Namespace, Resource, fields
+from flask_restx import Namespace, Resource, fields, reqparse
 from sqlalchemy import exists
 from sqlalchemy.exc import IntegrityError
 from models import db, Participant, BookParticipant
@@ -17,13 +17,24 @@ participant_name = api.model('ParticipantName', {
     'name': fields.String(required=True, description='The name of the participant')
 })
 
+# Argument parser for GET request filtering
+parser = reqparse.RequestParser()
+parser.add_argument('name', type=str,
+                    help='Filter by participant name')
+
 @api.route('/')
 class ParticipantList(Resource):
+    @api.expect(parser)
     @api.marshal_list_with(participant_model)
     def get(self):
         """List all participants"""
+        args = parser.parse_args()  # Parse arguments from query
+        query = Participant.query
         try:
-            participants = Participant.query.all()
+            # Apply filters based on arguments provided
+            if args['name']:
+                query = query.filter(Participant.name.ilike(f'%{args["name"]}%'))
+            participants = query.all()
             return participants
         except Exception as e:
             current_app.logger.error(f"Error retrieving participants: {e}")

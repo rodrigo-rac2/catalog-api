@@ -1,6 +1,6 @@
 # role_routes.py
 from flask import current_app
-from flask_restx import Namespace, Resource, fields
+from flask_restx import Namespace, Resource, fields, reqparse
 from sqlalchemy.sql import select
 from sqlalchemy.exc import IntegrityError
 from models import db, Role, BookParticipant
@@ -16,14 +16,24 @@ role_model = api.model('Role', {
     'description': fields.String(required=True, description='Role description')
 })
 
+# Argument parser for GET request filtering
+parser = reqparse.RequestParser()
+parser.add_argument('description', type=str,
+                    help='Filter by role description')
 
 @api.route('/')
 class RoleList(Resource):
+    @api.expect(parser)
     @api.marshal_list_with(role_model)
     def get(self):
         """List all roles"""
+        args = parser.parse_args()  # Parse arguments from query
+        query = Role.query
         try:
-            roles = Role.query.all()
+            # Apply filters based on arguments provided
+            if args['description']:
+                query = query.filter(Role.description.ilike(f'%{args["description"]}%'))
+            roles = query.all()
             return roles
         except Exception as e:
             current_app.logger.error(f"Error retrieving roles: {e}")
