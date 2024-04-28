@@ -79,7 +79,7 @@ book_model = api.model('Book', {
 
 # Argument parser for GET request filtering
 parser = reqparse.RequestParser()
-parser.add_argument('generic', type=str, help='Filter by book title, participant names, publisher, publication place or ISBN')
+parser.add_argument('search', type=str, help='Filter by book title, participant names, publisher, publication place or ISBN')
 parser.add_argument('title', type=str, help='Filter by book title')
 parser.add_argument('isbn', type=str, help='Filter by ISBN')
 parser.add_argument('publisher', type=str, help='Filter by publisher')
@@ -108,8 +108,8 @@ class BookList(Resource):
         )
 
         # Apply filters based on arguments provided
-        if args['generic']:
-            search_term = f"%{args['generic']}%"
+        if args['search']:
+            search_term = f"%{args['search']}%"
             query = query.join(BookParticipant).join(Participant).filter(
                 db.or_(
                     Book.title.ilike(search_term),
@@ -348,7 +348,7 @@ class BookFilterRoleList(Resource):
         ).filter(BookParticipant.bookid == bookid, BookParticipant.roleid != roleid).all()
 
         if not participants:
-            return {"message": "No participants found for this book"}, 404
+            return [], 200
 
         return participants, 200
 
